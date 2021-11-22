@@ -1,0 +1,64 @@
+﻿Program.Sub.Preflight.Start
+V.Global.sFileName.Declare
+V.Global.lRowCount.Declare
+V.Global.sFileData.Declare
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+
+F.Intrinsic.Control.CallSub("loadSheet")
+
+F.Intrinsic.Control.CallSub("procData")
+
+Program.Sub.Main.End
+
+Program.Sub.loadSheet.Start
+
+F.Intrinsic.UI.ShowOpenFileDialog("","xlsx|*.xlsx",V.Global.sFileName)
+
+F.Intrinsic.UI.Msgbox(V.Global.sFileName)
+
+F.Intrinsic.Control.If(V.Global.sFileName,=,"***CANCEL***")
+
+	F.Intrinsic.UI.Msgbox("No file selected!")
+	F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Else
+
+	Function.Intrinsic.Debug.InvokeDebugger
+	Function.Intrinsic.Debug.Stop
+	
+	F.Intrinsic.UI.InvokeWaitDialog("Loading...","Please wait...")
+
+	F.Automation.MSExcel.CreateAppObject("MSExcel")
+	F.Automation.MSExcel.OpenWorkbook("MSExcel","Workbook",V.Global.sFileName)
+	F.Automation.MSExcel.OpenWorksheet("Workbook","Worksheet",1)
+	F.Automation.MSExcel.RowCount("Worksheet",V.Global.lRowCount)
+	F.Automation.MSExcel.DestroyAllObjects("MSExcel","Workbook","Worksheet")
+	
+	F.Automation.MSExcel.ReadSpreadsheet(V.Global.sFileName,4,V.Global.lRowCount,V.Global.sFileData)
+	
+F.Intrinsic.Control.EndIf
+
+Program.Sub.loadSheet.End
+
+Program.Sub.procData.Start
+V.Local.sRowData.Declare
+V.Local.lCount.Declare
+
+F.Intrinsic.String.Split(V.Global.sFileData,"$!$",V.Local.sRowData)
+
+F.Intrinsic.Control.For(V.Local.lCount,0,V.Local.sRowData.UBound,1)
+
+	
+
+F.Intrinsic.Control.Next(V.Local.lCount)
+
+Program.Sub.procData.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$lukep$}$20211122092730779$}$se77YAxmQviVSBRx6Dva+7hHQnhldcS0y9ieo2GVcPxeonDIcpPAmqdOsluBXkF6PVXQRQOUzvs=
+Program.Sub.Comments.End
