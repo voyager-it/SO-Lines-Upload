@@ -47,11 +47,16 @@ Program.Sub.loadSheet.End
 Program.Sub.procData.Start
 V.Local.sRowData.Declare
 V.Local.lCount.Declare
+V.Local.sRowArray.Declare
+
+F.Intrinsic.UI.ChangeWaitStatus("Preparing SO lines...")
 
 F.Intrinsic.String.Split(V.Global.sFileData,"$!$",V.Local.sRowData)
 
 F.Intrinsic.Control.For(V.Local.lCount,0,V.Local.sRowData.UBound,1)
 
+	F.Intrinsic.String.Split(V.Local.sRowData(V.Local.lCount),"*!*",V.Local.sRowArray)
+	
 	
 
 F.Intrinsic.Control.Next(V.Local.lCount)
@@ -60,5 +65,5 @@ Program.Sub.procData.End
 
 Program.Sub.Comments.Start
 ${$5$}$3.0.0.0$}$1
-${$6$}$lukep$}$20211122092730779$}$se77YAxmQviVSBRx6Dva+7hHQnhldcS0y9ieo2GVcPxeonDIcpPAmqdOsluBXkF6PVXQRQOUzvs=
+${$6$}$lukep$}$20211122130727066$}$se77YAxmQviVSBRx6Dva+7hHQnhldcS0y9ieo2GVcPwmkwjV3RKGhc+S8YmkDpYWkzdowSHUN98=
 Program.Sub.Comments.End
