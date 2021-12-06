@@ -1,0 +1,941 @@
+﻿Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Variable.Global.sFileName.Declare(String)
+Variable.Global.sPrice.Declare(String)
+Variable.Global.sDiscount.Declare(String)
+Variable.UDT.uDiscount.Define("Order_No",String)
+Variable.UDT.uDiscount.Define("Part",String)
+Variable.UDT.uDiscount.Define("Discount_Price",String)
+Variable.UDT.uDiscount.Define("Amt_cost",Float,Amt_Cost)
+Variable.uGlobal.uDiscount.Declare("uDiscount")
+Variable.Global.bQuote.Declare(Boolean,False)
+Variable.Global.bSales.Declare(Boolean,False)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'      ******************************************************************
+'     *AddLinesforOrdersandQuotes
+'    *CopyName:ORDUPL.FD
+'   *
+'   *08/28/06NewAddlinesforOrders&QuotesAP
+'   *10/30/09AddedUnitofMeasureAP
+'  ******************************************************************
+'  FDORDADL-FILE
+'  LABELRECORDSARESTANDARD
+'    DATARECORDISORDADL-RECORD.
+'
+'      01ORDADL-RECORD.
+'             10ORDADL-TRANSACTIONPICX.
+'                88ORDADL-ORDERVALUE"O".
+'               88ORDADL-QUOTEVALUE"Q".
+'          10ORDADL-CUST-PROSP-NBRPICX(07).
+'         10ORDADL-ORDER-QUOTE-NOPICX(7).
+'       10ORDADL-PART-NUMBERPICX(38).
+'        10ORDADL-PARTREVREDEFINESORDADL-PART-NUMBER.
+'          15ORDADL-PART-17PICX(17).
+'         15ORDADL-PART-REVPICX(03).
+'        15FILLERPICX(18).
+'   10ORDADL-PART-LOCNPICX(02).
+'  10ORDADL-PROD-LINEPICX(05).
+' 10ORDADL-DESCRIPTIONPICX(30).
+  '10ORDADL-LINE-NBRPIC9(03).
+               '10ORDADL-LN-TYPEPICX.
+                '   88ORDADL-TYPE-BUYOUTVALUE"B".
+                 '  88ORDADL-TYPE-CONSIGNMENTVALUE"C".
+                  ' 88ORDADL-TYPE-DROPSHIPVALUE"D".
+                   '88ORDADL-TYPE-STANDARDVALUE"S".
+              ' 10ORDADL-QTY-ORDEREDPICS9(09)V9(4).
+     '          10ORDADL-WEIGHTPICS9(07)V9(3).
+      '**Ifpricesentmustbeincustomer'scurrency
+       '        10ORDADL-QUOTED-PRICEPICS9(10)V9(6).
+        '       10ORDADL-LN-USER-BLOCK.
+         '          15ORDADL-LN-USER-1PICX(30).
+          '         15ORDADL-LN-USER-2PICX(30).
+           '        15ORDADL-LN-USER-3PICX(30).
+            '       15ORDADL-LN-USER-4PICX(30).
+             '      15ORDADL-LN-USER-5PICX(30).
+              ' 10FILLERREDEFINESORDADL-LN-USER-BLOCK.
+               '    15ORDADL-LN-USEROCCURS5PICX(30).
+      '         10ORDADL-UNIT-OF-MEASUREPICXX.
+       '        10FILLERPICX(98).
+
+F.ODBC.Connection!con.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+'------------------Sales Order Header-script 1 button---------------------------
+F.Intrinsic.Control.If(V.Caller.Hook,=,11560)
+	V.Passed.000201.Set("Import Lines")
+	F.Intrinsic.Control.End
+
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.If(V.Caller.Hook,=,11910)
+	F.Intrinsic.String.Concat("GABSALESUPLOAD",V.Caller.Terminal,V.Caller.CompanyCode,V.Global.sFileName)
+	F.Intrinsic.Control.CallSub(Fileopen)
+F.Intrinsic.Control.EndIf
+
+
+'---------------Quote Header - script 1 button-----------------------------------
+F.Intrinsic.Control.If(V.Caller.Hook,=,10710)
+	V.Passed.000201.Set("Import Lines")
+	F.Intrinsic.Control.End
+
+F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.If(V.Caller.Hook,=,10960)
+	F.Intrinsic.String.Concat("GABQUOTEUPLOAD",V.Caller.Terminal,V.Caller.CompanyCode,V.Global.sFileName)
+	F.Intrinsic.Control.CallSub(Quoteopen)
+F.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.FileOpen.Start
+V.Local.sFile.Declare(String)
+V.Local.iRow.Declare(Long)
+V.Local.sRow.Declare(String)
+V.Local.i.Declare(Long)
+V.Local.sCol.Declare(String)
+V.Local.sSQL.Declare(String)
+V.Local.sSO.Declare(String)
+V.Local.sMsg.Declare(String)
+V.Local.sRev.Declare(String)
+V.Local.sPart.Declare(String)
+V.Local.sPartRev.Declare(String)
+V.Local.sUM.Declare(String)
+V.Local.fCost.Declare(Float)
+V.Local.sCost.Declare(String)
+V.Local.sCostSmall.Declare(String)
+V.Local.sCostTemp.Declare(String)
+V.Local.sText.Declare(String)
+V.Local.sTemp.Declare(String)
+V.Local.sLine.Declare(String)
+V.Local.fLBS.Declare(Float)
+V.Local.sLBS.Declare(String)
+V.Local.sLBSSmall.Declare(String)
+V.Local.sLBSTemp.Declare(String)
+V.Local.sPath.Declare(String)
+V.Local.bExists.Declare(Boolean)
+V.Local.sCust.Declare(String)
+V.Local.iUB.Declare(Long)
+V.Local.iVal.Declare(Long)
+V.Local.iLen.Declare(Long)
+V.Local.sSheetname.Declare(String)
+
+
+V.Local.iUB.Set(-1)
+V.uGlobal.uDiscount.Redim(-1,-1)
+
+F.Intrinsic.UI.ShowOpenFileDialog("","xlsx|*.xlsx",,V.Local.sFile)
+F.Intrinsic.Control.If(V.Local.sFile,=,"***CANCEL***")
+	F.Intrinsic.Control.End
+
+F.Intrinsic.Control.EndIf
+F.Intrinsic.UI.InvokeWaitDialog("Loading...","Please wait...")
+F.Intrinsic.File.GetFileNameFromFQN(V.Local.sFile,V.Local.sSO)
+F.Intrinsic.String.Split(V.Local.sSO,".",V.Local.sSO)
+'-----------------------------------------------------------------If Sales Order does not exist display notify user and exit program---------------------------------------------------------
+F.Intrinsic.String.Concat("Select * from V_ORDER_HEADER Where ORDER_NO = '",V.Local.sSO(0).Trim,"'",V.Local.sSQL)
+F.ODBC.Connection!con.OpenRecordsetRO("rst",V.Local.sSQL)
+F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,=,True)
+	F.Intrinsic.String.Concat("Sales Order ",V.Local.sSO(0)," not found.",V.Local.sMsg)
+	F.Intrinsic.UI.Msgbox(V.Local.sMsg,"GAB Error")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.Else
+	'Open Excel spreadsheet
+'
+'
+	F.Automation.MSExcel.CreateAppObject("MSExcel")
+	F.Automation.MSExcel.OpenWorkbook("MSExcel","Workbook",V.Local.sFile)
+	F.Automation.MSExcel.OpenWorksheet("Workbook","Worksheet",1)
+	F.Automation.MSExcel.RowCount("Worksheet",V.Local.iRow)
+	F.Automation.MSExcel.ReadSpreadsheet(V.Local.sFile,4,V.Local.iRow,V.Local.sSheetname)
+	F.Automation.MSExcel.DestroyAllObjects("MSExcel","Workbook","Worksheet")
+
+	F.Intrinsic.String.Split(V.Local.sSheetname,"&^&",V.Local.sRow)
+	F.Intrinsic.String.Split(V.Local.sRow(0),"$!$",V.Local.sRow)
+	F.Intrinsic.Control.For(V.Local.i,0,V.Local.sRow.UBound,1)
+		F.Intrinsic.UI.ChangeWaitStatus("Generating Sales Order Lines...",V.Local.i,V.Local.sRow.LBound,V.Local.sRow.UBound)
+		F.Intrinsic.String.Split(V.Local.sRow(v.Local.i),"*!*",V.Local.sCol)
+		F.Intrinsic.Control.If(V.Local.sCol(0),<>,"")
+			F.Intrinsic.String.RPad(V.Local.sCol(0)," ",17,V.Local.sPart)
+			F.Intrinsic.String.RPad(V.Local.sCol(1)," ",3,V.Local.sRev)
+			F.Intrinsic.String.Concat(V.Local.sPart,V.Local.sRev,V.Local.sPartRev)
+'-------------------------------------------------------------------'if part does not exist skip record----------------------------------------------------------------------------------
+			F.Intrinsic.String.Concat("select * from V_Inventory_Mstr where Part='",V.Local.sPartRev,"'",V.Local.sSQL)
+			F.ODBC.Connection!con.OpenRecordsetRO("rstINV",V.Local.sSQL)
+			F.Intrinsic.Control.If(V.Odbc.con!rstINV.EOF,=,False)
+'------------------------------------------------Calculate discount price --------------------------------------------------------------------------------------------------------------
+				F.Intrinsic.Control.If(V.uGlobal.uDiscount.UBound,=,-1)
+					V.uGlobal.uDiscount.Redim(0,0)
+					V.uGlobal.uDiscount!Order_No.Set(V.Local.sSO(0))
+					V.uGlobal.uDiscount!Part.Set(V.Local.sPartRev)
+					F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!Order_discount,<>,0)
+						F.Intrinsic.Math.Sub(1,V.ODBC.con!rst.FieldValTrim!Order_discount,V.Local.sTemp)
+						F.Intrinsic.Math.Mult(V.ODBC.con!rstINV.FieldValTrim!AMT_PRICE,V.Local.sTemp,V.uGlobal.uDiscount!Discount_Price)
+						V.uGlobal.uDiscount!Amt_Cost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+					F.Intrinsic.Control.Else
+						V.uGlobal.uDiscount!Discount_Price.Set(0)
+						V.uGlobal.uDiscount!Amt_Cost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.Else
+					V.Local.iUB.Set(V.uGlobal.uDiscount.UBound)
+					F.Intrinsic.Math.Add(V.Local.iUB,1,V.Local.iUB)
+					V.uGlobal.uDiscount.RedimPreserve(V.uGlobal.uDiscount.LBound,V.Local.iUB)
+					V.uGlobal.uDiscount(v.Local.iUB)!Order_No.Set(V.Local.sSO(0))
+					V.uGlobal.uDiscount(v.Local.iUB)!Part.Set(V.Local.sPartRev)
+					F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!Order_discount,<>,0)
+						F.Intrinsic.Math.Sub(1,V.ODBC.con!rst.FieldValTrim!Order_discount,V.Local.sTemp)
+						F.Intrinsic.Math.Mult(V.ODBC.con!rstINV.FieldValTrim!AMT_PRICE,V.Local.sTemp,V.uGlobal.uDiscount(v.Local.iUB)!Discount_Price)
+						V.uGlobal.uDiscount(v.Local.iUB)!Amt_Cost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+					F.Intrinsic.Control.Else
+						V.uGlobal.uDiscount!Discount_Price.Set(0)
+						V.uGlobal.uDiscount!Amt_Cost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+'-------------------------------------------------GetCost-------------------------------------------------------------------------------------------------------------------------------------
+				F.Intrinsic.Control.If(V.ODBC.con!rstINV.FieldValFloat!AMT_COST,>,0)
+					V.Local.fCost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+				F.Intrinsic.Control.Else
+					F.Intrinsic.Control.If(V.ODBC.con!rstINV.FieldValFloat!AMT_ALT_COST,>,0)
+						V.Local.fCost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_ALT_COST)
+					F.Intrinsic.Control.Else
+						V.Local.fCost.Set(0.0)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+				V.Local.sCost.Set("")
+				V.Local.sCostSmall.Set("")
+				V.Local.sCostTemp.Set(V.Local.fCost.String)
+				F.Intrinsic.String.Split(V.Local.sCostTemp,".",V.Local.sCostTemp)
+				F.Intrinsic.String.LPad(V.Local.sCostTemp(0),"0",10,V.Local.sCost)
+				F.Intrinsic.Control.If(V.Local.sCostTemp.UBound,<,1)
+					F.Intrinsic.String.RPad("0","0",6,V.Local.sCostSmall)
+				F.Intrinsic.Control.Else
+					F.Intrinsic.String.RPad(V.Local.sCostTemp(1),"0",6,V.Local.sCostSmall)
+				F.Intrinsic.Control.EndIf
+				F.Intrinsic.String.Concat(V.Local.sCost,V.Local.sCostSmall,V.Local.sCost)
+'----------------------------------------------------------------CheckifSOlinesexist----------------------------------------------------------------------------------------------------------------------------
+				F.Intrinsic.String.Concat("Select * From V_Order_Lines Where Order_No = '",V.Local.sSO(0),"' and Record_Type = 'L'",V.Local.sSQL)
+				F.ODBC.Connection!con.OpenRecordsetRO("rstLINES",V.Local.sSQL)
+				F.Intrinsic.Control.If(V.ODBC.con!rstLINES.EOF,=,True)
+				'O = Order, Q = Quote
+					F.Intrinsic.String.Concat(V.Local.sText,"O",V.Local.sText)
+					'Customer
+					F.Intrinsic.String.RPad(V.ODBC.con!rst.FieldValTrim!CUSTOMER," ",7,V.Local.sCust)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sCust,V.Local.sText)
+					'Order No
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sSO(0),V.Local.sText)
+					'Part
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sPart,V.Local.sText)
+					'Rev
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sRev,V.Local.sText)
+					'Filler
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Rpad(V.Local.sTemp," ",18,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'LOC
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Rpad(V.ODBC.con!rstINV.FieldVal!LOCATION," ",2,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'PL
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.RPad(V.ODBC.con!rstINV.FieldValTrim!PRODUCT_LINE," ",5,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Description
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.RPad(V.ODBC.con!rstINV.FieldValTrim!DESCRIPTION," ",30,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Line
+					F.Intrinsic.Control.If(V.Local.sLine,=,"")
+						V.Local.sLine.Set("001")
+						F.Intrinsic.String.LPad(V.Local.sLine,"0",3,V.Local.sLine)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLine,V.Local.sText)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.Math.Add(V.Local.sLine,1,V.Local.sLine)
+						F.Intrinsic.String.LPad(V.Local.sLine,"0",3,V.Local.sLine)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLine,V.Local.sText)
+					F.Intrinsic.Control.EndIf
+					'Line type
+					F.Intrinsic.String.Concat(V.Local.sText,"S",V.Local.sText)
+					'Qty ordered
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.LPad(V.Local.sCol(2),"0",9,V.Local.sTemp)
+					F.Intrinsic.String.RPad(V.Local.sTemp,"0",13,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Weight
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Concat("Select * from Inventory_Mst2 where Part='",V.Local.sPartRev,"'",V.Local.sSQL)
+					F.ODBC.Connection!con.OpenRecordsetRO("rst2",V.Local.sSQL)
+					F.Intrinsic.Control.If(V.Odbc.con!rst2.EOF,=,False)
+						'F.Intrinsic.Math.Mult(V.Odbc.con!rst2.FieldVal!Lbs,100,V.Local.iVal)
+						V.Local.fLBS.Set(V.Odbc.con!rst2.FieldVal!Lbs)
+						V.Local.sLBSTemp.Set(V.Local.fLBS.String)
+						F.Intrinsic.String.Split(V.Local.sLBSTemp,".",V.Local.sLBSTemp)
+						F.Intrinsic.String.LPad(V.Local.sLBSTemp(0),"0",7,V.Local.sLBS)
+						F.Intrinsic.Control.If(V.Local.sLBSTemp.Length,<,2)
+							F.Intrinsic.String.RPad("0","0",3,V.Local.sLBSSmall)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.String.RPad(V.Local.sLBSTemp(1),"0",3,V.Local.sLBSSmall)
+						F.Intrinsic.Control.EndIf
+						F.Intrinsic.String.Concat(V.Local.sLBS,V.Local.sLBSSmall,V.Local.sLBS)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLBS,V.Local.sText)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.String.Concat(V.Local.sText,"0000000000",V.Local.sText)
+					F.Intrinsic.Control.EndIf
+					F.ODBC.con!rst2.Close
+					'Quote Price
+					V.Local.sTemp.Set("")
+					F.Intrinsic.Control.If(V.Local.sCol(3),<>,"")
+						'If column D is not equal to blank, including zeroes, use value in Column D as the Quote price for the line( NOT THE HEADER)
+						F.Intrinsic.Math.Mult(V.Local.sCol(3),100,V.Local.iVal)
+						F.intrinsic.String.LPad(V.Local.iVal.String,"0",12,V.Local.sTemp)
+						F.Intrinsic.String.RPad(V.Local.sTemp,"0",16,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.local.stext,V.local.stemp,V.local.stext)
+						F.Intrinsic.control.if(V.local.stemp,=,"0000000000000000")
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",150,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							'Unit-of-Measure
+							V.Local.sUM.Set(V.Odbc.con!rstINV.FieldVal!UM_INVENTORY)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sUM,V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,"1",V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",32,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,"1",V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sCost,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",15,V.Local.sTemp)							
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+						F.intrinsic.control.else
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",150,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							'Unit-of-Measure
+							V.Local.sUM.Set(V.Odbc.con!rstINV.FieldVal!UM_INVENTORY)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sUM,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",33,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,"1",V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sCost,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",15,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.newline,V.Local.sText)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.Else
+						F.Intrinsic.Math.Mult(V.Odbc.con!rstINV.FieldVal!Amt_Price,100,V.Local.iVal)
+						F.Intrinsic.String.LPad(V.Local.ival,"0",12,V.Local.sTemp)
+						F.Intrinsic.String.RPad(V.Local.sTemp,"0",16,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.Intrinsic.control.if(V.local.stemp,=,"0000000000000000")
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",150,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							'Unit-of-Measure
+							V.Local.sUM.Set(V.Odbc.con!rstINV.FieldVal!UM_INVENTORY)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sUM,V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,"1",V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",32,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,"1",V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sCost,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",15,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+						F.intrinsic.control.else
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",150,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							'Unit-of-Measure
+							V.Local.sUM.Set(V.Odbc.con!rstINV.FieldVal!UM_INVENTORY)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sUM,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",33,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,"1",V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sCost,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",15,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.newline,V.Local.sText)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.Else
+'------------------------------------------------------- ORDER LINES EXIST --------------------------------------------------------------------------------------------------------
+					'Transaction - O=Order ,Q = Quote
+					F.Intrinsic.String.Concat(V.Local.sText,"O",V.Local.sText)
+					'Customer
+					F.Intrinsic.String.RPad(V.ODBC.con!rst.FieldValTrim!CUSTOMER," ",7,V.Local.sCust)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sCust,V.Local.sText)
+					'Order No
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sSO,V.Local.sText)
+					'Part
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sPart,V.Local.sText)
+					'Rev
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sRev,V.Local.sText)
+					'Filler - may not need
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Rpad(V.Local.sTemp," ",18,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'LOC
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Rpad(V.ODBC.con!rstINV.FieldVal!LOCATION," ",2,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'PL
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.RPad(V.ODBC.con!rstINV.FieldValTrim!PRODUCT_LINE," ",5,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Description
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.RPad(V.ODBC.con!rstINV.FieldValTrim!DESCRIPTION," ",30,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Line
+					V.Local.sLine.Set(V.ODBC.con!rstLINES.FieldValTrim!RECORD_NO)
+					F.Intrinsic.Math.Add(V.Local.sLine,10,V.Local.sLine)
+					F.Intrinsic.String.LPad(V.Local.sLine,"0",3,V.Local.sLine)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLine,V.Local.sText)
+					'Line type
+					F.Intrinsic.String.Concat(V.Local.sText,"S",V.Local.sText)
+					'Qty ordered
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.LPad(V.Local.sCol(2),"0",9,V.Local.sTemp)
+					F.Intrinsic.String.RPad(V.Local.sTemp,"0",13,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Weight
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Concat("Select * from Inventory_Mst2 where Part='",V.Local.sPartRev,"'",V.Local.sSQL)
+					F.ODBC.Connection!con.OpenRecordsetRO("rst2",V.Local.sSQL)
+					F.Intrinsic.Control.If(V.Odbc.con!rst2.EOF,=,False)
+						V.Local.fLBS.Set(V.Odbc.con!rst2.FieldVal!Lbs)
+						V.Local.sLBSTemp.Set(V.Local.fLBS.String)
+						F.Intrinsic.String.Split(V.Local.sLBSTemp,".",V.Local.sLBSTemp)
+						F.Intrinsic.String.LPad(V.Local.sLBSTemp(0),"0",7,V.Local.sLBS)
+						F.Intrinsic.Control.If(V.Local.sLBSTemp.Length,<,2)
+							F.Intrinsic.String.RPad("0","0",3,V.Local.sLBSSmall)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.String.RPad(V.Local.sLBSTemp(1),"0",3,V.Local.sLBSSmall)
+						F.Intrinsic.Control.EndIf
+						F.Intrinsic.String.Concat(V.Local.sLBS,V.Local.sLBSSmall,V.Local.sLBS)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLBS,V.Local.sText)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.String.Concat(V.Local.sText,"0000000000",V.Local.sText)
+					F.Intrinsic.Control.EndIf
+					F.ODBC.con!rst2.Close
+					'Quote Price
+					V.Local.sTemp.Set("")
+					F.Intrinsic.Control.If(V.Local.sCol(3),<>,"")
+						'If column D is not equal to blank, including zeroes, use value in Column D as the Quote price for the line( NOT THE HEADER)
+						F.Intrinsic.Math.Mult(V.Local.sCol(3),100,V.Local.iVal)
+						F.intrinsic.String.LPad(V.Local.iVal.String,"0",12,V.Local.sTemp)
+						F.Intrinsic.String.RPad(V.Local.sTemp,"0",16,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.local.stext,V.local.stemp,V.local.stext)
+						F.Intrinsic.control.if(V.local.stemp,=,"0000000000000000")
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",150,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							'Unit-of-Measure
+							V.Local.sUM.Set(V.Odbc.con!rstINV.FieldVal!UM_INVENTORY)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sUM,V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,"1",V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",32,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,"1",V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sCost,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",15,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+						F.intrinsic.control.else
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",150,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							'Unit-of-Measure
+							V.Local.sUM.Set(V.Odbc.con!rstINV.FieldVal!UM_INVENTORY)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sUM,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",33,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,"1",V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sCost,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",15,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.newline,V.Local.sText)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.Else
+						F.Intrinsic.Math.Mult(V.Odbc.con!rstINV.FieldVal!Amt_Price,100,V.Local.iVal)
+						V.Local.sTemp.Set("")
+						F.Intrinsic.String.LPad(V.Local.ival,"0",12,V.Local.sTemp)
+						F.Intrinsic.String.RPad(V.Local.sTemp,"0",16,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.Intrinsic.control.if(V.local.stemp,=,"0000000000000000")
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",150,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							'Unit-of-Measure
+							V.Local.sUM.Set(V.Odbc.con!rstINV.FieldVal!UM_INVENTORY)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sUM,V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,"1",V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",32,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,"1",V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sCost,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",15,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+						F.intrinsic.control.else
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",150,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							'Unit-of-Measure
+							V.Local.sUM.Set(V.Odbc.con!rstINV.FieldVal!UM_INVENTORY)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sUM,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",33,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,"1",V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,V.Local.sCost,V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",15,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.newline,V.Local.sText)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+				F.ODBC.con!rstLINES.Close
+			F.Intrinsic.Control.EndIf
+			F.ODBC.con!rstINV.Close
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.i)
+F.Intrinsic.Control.EndIf
+F.ODBC.con!rst.Close
+
+F.Intrinsic.Control.If(V.Local.sText.Length,>=,2)
+	F.Intrinsic.Math.Sub(V.Local.sText.Length,2,V.Local.iLen)
+	F.Intrinsic.String.Left(V.Local.stext,V.Local.ilen,V.Local.sText)
+F.Intrinsic.Control.EndIf
+
+
+F.Intrinsic.Control.If(V.Local.sText,<>,"")
+	F.Intrinsic.String.Concat(V.Caller.FilesDir,"\",V.Global.sFileName,V.Local.sPath)
+	F.Intrinsic.File.Exists(V.Local.sPath,V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists,=,True)
+		F.Intrinsic.File.DeleteFile(V.Local.sPath)
+	F.Intrinsic.Control.EndIf
+	F.Intrinsic.File.String2File(V.Local.sPath,V.Local.sText)
+F.Intrinsic.Control.EndIf
+V.Global.bSales.Set(True)
+F.Intrinsic.Control.CallSub(Uploadfile)
+F.Intrinsic.Control.CallSub(Discount)
+
+Program.Sub.FileOpen.End
+
+Program.Sub.UploadFile.Start
+V.Local.sParam.Declare(String)
+V.Local.sPath.Declare(String)
+V.Local.sTemp.Declare(String)
+
+V.Local.sParam.Set("")
+F.Intrinsic.String.Concat(V.Caller.FilesDir,"\",V.Global.sFileName,V.Local.sPath)
+F.Intrinsic.String.Rpad(Variable.Caller.User," ",8,Variable.Local.sTemp)
+F.Intrinsic.String.Concat(V.Local.sParam,Variable.Caller.CompanyCode,Variable.Local.sTemp,Variable.Local.sPath,Variable.Local.sParam)
+F.Intrinsic.Control.If(V.Global.bSales,=,True)
+	F.Intrinsic.UI.ChangeWaitStatus("Adding Sales Order Lines...")
+F.Intrinsic.Control.Else
+	F.Intrinsic.UI.ChangeWaitStatus("Adding Quote Lines...")
+F.Intrinsic.Control.EndIf
+
+'F.Intrinsic.Debug.CallWrapperDebugEnable
+F.Intrinsic.Task.Launchgsssync("ORDADCMD","-c",Variable.Local.sParam)
+F.Intrinsic.Control.ExitSub
+
+
+Program.Sub.UploadFile.End
+
+Program.Sub.Discount.Start
+V.Local.i.Declare(Long)
+V.Local.sSQL.Declare(String)
+
+F.Intrinsic.Control.If(V.Global.bSales,=,True)
+	F.Intrinsic.Control.For(V.Local.i,V.uGlobal.uDiscount.LBound,V.uGlobal.uDiscount.UBound,1)
+		F.Intrinsic.UI.ChangeWaitStatus("Updating sales order discount prices...",V.Local.i,V.uGlobal.uDiscount.LBound,V.uGlobal.uDiscount.UBound)
+		F.Intrinsic.String.Concat("Select * From Order_Lines Where Order_No = '",V.uGlobal.uDiscount(v.Local.i)!Order_No,"' and Part = '",V.uGlobal.uDiscount(v.Local.i)!Part,"' and Record_Type = 'L'",V.Local.sSQL)
+		F.ODBC.Connection!con.OpenRecordsetRW("rst",V.Local.sSQL)
+		F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,=,False)
+			'F.ODBC.con!rst.Set!EXTENSION(V.ODBC.con!rst.FieldValTrim!PRICE)
+			F.ODBC.con!rst.Set!COST(V.uGlobal.uDiscount(v.Local.i)!Amt_cost)
+			'F.ODBC.con!rst.Set!PRICE_DISC_ORD(V.uGlobal.uDiscount(v.Local.i)!Discount_Price)
+			F.ODBC.con!rst.Update
+		F.Intrinsic.Control.EndIf
+		F.ODBC.con!rst.Close
+	F.Intrinsic.Control.Next(V.Local.i)
+	F.Intrinsic.UI.CloseWaitDialog
+	F.Intrinsic.UI.Msgbox("Upload successful.","GAB Msg")
+	V.Global.bSales.Set(False)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.If(V.Global.bQuote,=,True)
+	F.Intrinsic.Control.For(V.Local.i,V.uGlobal.uDiscount.LBound,V.uGlobal.uDiscount.UBound,1)
+		F.Intrinsic.UI.ChangeWaitStatus("Updating quote discount prices...",V.Local.i,V.uGlobal.uDiscount.LBound,V.uGlobal.uDiscount.UBound)
+		F.Intrinsic.String.Concat("Select * From Quote_Lines Where Quote_No = '",V.uGlobal.uDiscount(v.Local.i)!Order_No,"' and Part = '",V.uGlobal.uDiscount(v.Local.i)!Part,"' and Record_Type = 'L'",V.Local.sSQL)
+		F.ODBC.Connection!con.OpenRecordsetRW("rst",V.Local.sSQL)
+		F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,=,False)
+			'F.ODBC.con!rst.Set!COST(V.uGlobal.uDiscount(v.Local.i)!Amt_cost)
+			'F.ODBC.con!rst.Set!PRICE_DISC_ORD(V.uGlobal.uDiscount(v.Local.i)!Discount_Price)
+			F.ODBC.con!rst.Update
+		F.Intrinsic.Control.EndIf
+		F.ODBC.con!rst.Close
+	F.Intrinsic.Control.Next(V.Local.i)
+	F.Intrinsic.UI.CloseWaitDialog
+	F.Intrinsic.UI.Msgbox("Upload successful.","GAB Msg")
+	V.Global.bQuote.Set(False)
+F.Intrinsic.Control.EndIf
+
+F.ODBC.Connection!con.Close
+F.Intrinsic.Control.End
+
+Program.Sub.Discount.End
+
+Program.Sub.QuoteOpen.Start
+V.Local.sFile.Declare(String)
+V.Local.iRow.Declare(Long)
+V.Local.sRow.Declare(String)
+V.Local.i.Declare(Long)
+V.Local.sCol.Declare(String)
+V.Local.sSQL.Declare(String)
+V.Local.sSO.Declare(String)
+V.Local.sMsg.Declare(String)
+V.Local.sRev.Declare(String)
+V.Local.sPart.Declare(String)
+V.Local.sPartRev.Declare(String)
+V.Local.sText.Declare(String)
+V.Local.sTemp.Declare(String)
+V.Local.sLine.Declare(String)
+V.Local.fLBS.Declare(Float)
+V.Local.sLBS.Declare(String)
+V.Local.sLBSSmall.Declare(String)
+V.Local.sLBSTemp.Declare(String)
+V.Local.iVal.Declare(Long)
+V.Local.sPath.Declare(String)
+V.Local.bExists.Declare(Boolean)
+V.Local.sCust.Declare(String)
+V.Local.iUB.Declare(Long)
+'
+'
+'V.Local.iUB.Set(-1)
+'V.uGlobal.uDiscount.Redim(-1,-1)
+
+F.Intrinsic.UI.ShowOpenFileDialog("","xlsx|*.xlsx",,V.Local.sFile)
+F.Intrinsic.Control.If(V.Local.sFile,=,"***CANCEL***")
+	F.Intrinsic.Control.End
+
+F.Intrinsic.Control.EndIf
+F.Intrinsic.UI.InvokeWaitDialog("Loading...","Please wait...")
+F.Intrinsic.File.GetFileNameFromFQN(V.Local.sFile,V.Local.sSO)
+F.Intrinsic.String.Split(V.Local.sSO,".",V.Local.sSO)
+'-----------------------------------------------------------------If Quote does not exist display notify user and exit program---------------------------------------------------------
+F.Intrinsic.String.Concat("Select * from V_QUOTE_HEADER Where Quote_No = '",V.Local.sSO(0).Trim,"'",V.Local.sSQL)
+F.ODBC.Connection!con.OpenRecordsetRO("rst",V.Local.sSQL)
+F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,=,True)
+	F.Intrinsic.String.Concat("Quote number ",V.Local.sSO(0)," not found.",V.Local.sMsg)
+	F.Intrinsic.UI.Msgbox(V.Local.sMsg,"GAB Error")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.Else
+'
+'
+	'Open Excel spreadsheet
+	F.Automation.MSExcel.CreateAppObject("MSExcel")
+	F.Automation.MSExcel.OpenWorkbook("MSExcel","Workbook",V.Local.sFile)
+	F.Automation.MSExcel.OpenWorksheet("Workbook","Worksheet",1)
+	F.Automation.MSExcel.RowCount("Worksheet",V.Local.iRow)
+	F.Automation.MSExcel.DestroyAllObjects("MSExcel","Workbook","Worksheet")
+	F.Automation.MSExcel.ReadSpreadsheet(V.Local.sFile,4,V.Local.iRow,V.Local.sFile)
+	F.Intrinsic.String.Split(V.Local.sFile,"$!$",V.Local.sRow)
+	F.Intrinsic.Control.For(V.Local.i,0,V.Local.sRow.UBound,1)
+		F.Intrinsic.UI.ChangeWaitStatus("Generating Quote Lines...",V.Local.i,V.Local.sRow.LBound,V.Local.sRow.UBound)
+		F.Intrinsic.String.Split(V.Local.sRow(v.Local.i),"*!*",V.Local.sCol)
+		F.Intrinsic.Control.If(V.Local.sCol(0),<>,"")
+			F.Intrinsic.String.RPad(V.Local.sCol(0)," ",17,V.Local.sPart)
+			F.Intrinsic.String.RPad(V.Local.sCol(1)," ",3,V.Local.sRev)
+			F.Intrinsic.String.Concat(V.Local.sPart,V.Local.sRev,V.Local.sPartRev)
+'-------------------------------------------------------------------'if part does not exist skip record----------------------------------------------------------------------------------
+			F.Intrinsic.String.Concat("select * from V_Inventory_Mstr where Part='",V.Local.sPartRev,"'",V.Local.sSQL)
+			F.ODBC.Connection!con.OpenRecordsetRO("rstINV",V.Local.sSQL)
+			F.Intrinsic.Control.If(V.Odbc.con!rstINV.EOF,=,False)
+
+'------------------------------------------------Calculate discount price --------------------------------------------------------------------------------------------------------------
+				F.Intrinsic.Control.If(V.uGlobal.uDiscount.UBound,=,-1)
+					V.uGlobal.uDiscount.Redim(0,0)
+					'Quote number
+					V.uGlobal.uDiscount!Order_No.Set(V.Local.sSO(0))
+					V.uGlobal.uDiscount!Part.Set(V.Local.sPartRev)
+					F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!quote_discount,<>,0)
+						F.Intrinsic.Math.Sub(1,V.ODBC.con!rst.FieldValTrim!quote_discount,V.Local.sTemp)
+						F.Intrinsic.Math.Mult(V.ODBC.con!rstINV.FieldValTrim!AMT_PRICE,V.Local.sTemp,V.uGlobal.uDiscount!Discount_Price)
+						V.uGlobal.uDiscount!Amt_Cost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+					F.Intrinsic.Control.Else
+						V.uGlobal.uDiscount!Discount_Price.Set(0)
+						V.uGlobal.uDiscount!Amt_Cost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.Else
+					V.Local.iUB.Set(V.uGlobal.uDiscount.UBound)
+					F.Intrinsic.Math.Add(V.Local.iUB,1,V.Local.iUB)
+					V.uGlobal.uDiscount.RedimPreserve(V.uGlobal.uDiscount.LBound,V.Local.iUB)
+					V.uGlobal.uDiscount(v.Local.iUB)!Order_No.Set(V.Local.sSO(0))
+					V.uGlobal.uDiscount(v.Local.iUB)!Part.Set(V.Local.sPartRev)
+					F.Intrinsic.Control.If(V.ODBC.con!rst.FieldValTrim!quote_discount,<>,0)
+						F.Intrinsic.Math.Sub(1,V.ODBC.con!rst.FieldValTrim!Quote_discount,V.Local.sTemp)
+						F.Intrinsic.Math.Mult(V.ODBC.con!rstINV.FieldValTrim!AMT_PRICE,V.Local.sTemp,V.uGlobal.uDiscount(v.Local.iUB)!Discount_Price)
+						V.uGlobal.uDiscount(v.Local.iUB)!Amt_Cost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+					F.Intrinsic.Control.Else
+						V.uGlobal.uDiscount!Discount_Price.Set(0)
+						V.uGlobal.uDiscount!Amt_Cost.Set(V.ODBC.con!rstINV.FieldValFloat!AMT_COST)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+'----------------------------------------------------------------CheckifSOlinesexist----------------------------------------------------------------------------------------------------------------------------
+				F.Intrinsic.String.Concat("Select * From V_Quote_Lines Where Quote_No = '",V.Local.sSO(0),"' and Record_Type = 'L'",V.Local.sSQL)
+				F.ODBC.Connection!con.OpenRecordsetRO("rstLINES",V.Local.sSQL)
+				F.Intrinsic.Control.If(V.ODBC.con!rstLINES.EOF,=,True)
+					'O = Order, Q = Quote
+					F.Intrinsic.String.Concat(V.Local.sText,"Q",V.Local.sText)
+					'Customer
+					F.Intrinsic.String.RPad(V.ODBC.con!rst.FieldValTrim!CUSTOMER," ",7,V.Local.sCust)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sCust,V.Local.sText)
+					'Quote No
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sSO(0),V.Local.sText)
+					'Part
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sPart,V.Local.sText)
+					'Rev
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sRev,V.Local.sText)
+					'Filler
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Rpad(V.Local.sTemp," ",18,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'LOC
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Rpad(V.ODBC.con!rstINV.FieldVal!LOCATION," ",2,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'PL
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.RPad(V.ODBC.con!rstINV.FieldValTrim!PRODUCT_LINE," ",5,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Description
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.RPad(V.ODBC.con!rstINV.FieldValTrim!DESCRIPTION," ",30,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Line
+					F.Intrinsic.Control.If(V.Local.sLine,=,"")
+						V.Local.sLine.Set("001")
+						F.Intrinsic.String.LPad(V.Local.sLine,"0",3,V.Local.sLine)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLine,V.Local.sText)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.Math.Add(V.Local.sLine,1,V.Local.sLine)
+						F.Intrinsic.String.LPad(V.Local.sLine,"0",3,V.Local.sLine)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLine,V.Local.sText)
+					F.Intrinsic.Control.EndIf
+					'Line type
+					F.Intrinsic.String.Concat(V.Local.sText,"S",V.Local.sText)
+					'Qty ordered
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.LPad(V.Local.sCol(2),"0",9,V.Local.sTemp)
+					F.Intrinsic.String.RPad(V.Local.sTemp,"0",13,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Weight
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Concat("Select * from Inventory_Mst2 where Part='",V.Local.sPartRev,"'",V.Local.sSQL)
+					F.ODBC.Connection!con.OpenRecordsetRO("rst2",V.Local.sSQL)
+					F.Intrinsic.Control.If(V.Odbc.con!rst2.EOF,=,False)
+						V.Local.fLBS.Set(V.Odbc.con!rst2.FieldVal!Lbs)
+						V.Local.sLBSTemp.Set(V.Local.fLBS.String)
+						F.Intrinsic.String.Split(V.Local.sLBSTemp,".",V.Local.sLBSTemp)
+						F.Intrinsic.String.LPad(V.Local.sLBSTemp(0),"0",7,V.Local.sLBS)
+						F.Intrinsic.Control.If(V.Local.sLBSTemp.Length,<,2)
+							F.Intrinsic.String.RPad("0","0",3,V.Local.sLBSSmall)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.String.RPad(V.Local.sLBSTemp(1),"0",3,V.Local.sLBSSmall)
+						F.Intrinsic.Control.EndIf
+						F.Intrinsic.String.Concat(V.Local.sLBS,V.Local.sLBSSmall,V.Local.sLBS)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLBS,V.Local.sText)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.String.Concat(V.Local.sText,"0000000000",V.Local.sText)
+					F.Intrinsic.Control.EndIf
+					F.ODBC.con!rst2.Close
+					'Quote Price
+					V.Local.sTemp.Set("")
+					F.Intrinsic.Control.If(V.Local.sCol(3),<>,"")
+						'If column D is not equal to blank, including zeroes, use value in Column D as the Quote price for the line( NOT THE HEADER)
+						F.Intrinsic.Math.Mult(V.Local.sCol(3),100,V.Local.iVal)
+						F.intrinsic.String.LPad(V.Local.iVal.String,"0",12,V.Local.sTemp)
+						F.Intrinsic.String.RPad(V.Local.sTemp,"0",16,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.local.stext,V.local.stemp,V.local.stext)
+						F.Intrinsic.control.if(V.local.stemp,=,"0000000000000000")
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",152,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,"1",V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",67,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.intrinsic.control.else
+						V.Local.sTemp.Set("")
+						F.Intrinsic.String.rpad(V.local.stemp," ",250,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.newline,V.Local.sText)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.Else
+						F.Intrinsic.Math.Mult(V.Odbc.con!rstINV.FieldVal!Amt_Price,100,V.Local.iVal)
+						F.Intrinsic.String.LPad(V.Local.ival,"0",12,V.Local.sTemp)
+						F.Intrinsic.String.RPad(V.Local.sTemp,"0",16,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.Intrinsic.control.if(V.local.stemp,=,"0000000000000000")
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",152,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,"1",V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",67,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.intrinsic.control.else
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.Rpad(V.Local.sTemp," ",250,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.Else
+'------------------------------------------------------- ORDER LINES EXIST --------------------------------------------------------------------------------------------------------
+					'Transaction - O=Order ,Q = Quote
+					F.Intrinsic.String.Concat(V.Local.sText,"Q",V.Local.sText)
+					'Customer
+					F.Intrinsic.String.RPad(V.ODBC.con!rst.FieldValTrim!CUSTOMER," ",7,V.Local.sCust)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sCust,V.Local.sText)
+					'Order No
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sSO(0),V.Local.sText)
+					'Part
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sPart,V.Local.sText)
+					'Rev
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sRev,V.Local.sText)
+					'Filler - may not need
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Rpad(V.Local.sTemp," ",18,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'LOC
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.Rpad(V.ODBC.con!rstINV.FieldVal!LOCATION," ",2,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'PL
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.RPad(V.ODBC.con!rstINV.FieldValTrim!PRODUCT_LINE," ",5,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Description
+					V.Local.sTemp.Set("")
+					F.Intrinsic.String.RPad(V.ODBC.con!rstINV.FieldValTrim!DESCRIPTION," ",30,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Line
+					V.Local.sLine.Set(V.ODBC.con!rstLINES.FieldValTrim!RECORD_NO)
+					F.Intrinsic.Math.Add(V.Local.sLine,10,V.Local.sLine)
+					F.Intrinsic.String.LPad(V.Local.sLine,"0",3,V.Local.sLine)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLine,V.Local.sText)
+					'Line type
+					F.Intrinsic.String.Concat(V.Local.sText,"S",V.Local.sText)
+					'Qty ordered
+					F.Intrinsic.String.LPad(V.Local.sCol(2),"0",9,V.Local.sTemp)
+					F.Intrinsic.String.RPad(V.Local.sTemp,"0",13,V.Local.sTemp)
+					F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+					'Weight
+					F.Intrinsic.String.Concat("Select * from Inventory_Mst2 where Part='",V.Local.sPartRev,"'",V.Local.sSQL)
+					F.ODBC.Connection!con.OpenRecordsetRO("rst2",V.Local.sSQL)
+					F.Intrinsic.Control.If(V.Odbc.con!rst2.EOF,=,False)
+						V.Local.fLBS.Set(V.Odbc.con!rst2.FieldVal!Lbs)
+						V.Local.sLBSTemp.Set(V.Local.fLBS.String)
+						F.Intrinsic.String.Split(V.Local.sLBSTemp,".",V.Local.sLBSTemp)
+						F.Intrinsic.String.LPad(V.Local.sLBSTemp(0),"0",7,V.Local.sLBS)
+						F.Intrinsic.Control.If(V.Local.sLBSTemp.Length,<,2)
+							F.Intrinsic.String.RPad("0","0",3,V.Local.sLBSSmall)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.String.RPad(V.Local.sLBSTemp(1),"0",3,V.Local.sLBSSmall)
+						F.Intrinsic.Control.EndIf
+						F.Intrinsic.String.Concat(V.Local.sLBS,V.Local.sLBSSmall,V.Local.sLBS)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sLBS,V.Local.sText)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.String.Concat(V.Local.sText,"0000000000",V.Local.sText)
+												F.Intrinsic.Control.EndIf
+					F.ODBC.con!rst2.Close
+					'Quote Price
+					F.Intrinsic.Control.If(V.Local.sCol(3),<>,"")
+						'If column D is not equal to blank, including zeroes, use value in Column D as the Quote price for the line( NOT THE HEADER)
+						F.Intrinsic.Math.Mult(V.Local.sCol(3),100,V.Local.iVal)
+						F.intrinsic.String.LPad(V.Local.iVal.String,"0",12,V.Local.sTemp)
+						F.Intrinsic.String.RPad(V.Local.sTemp,"0",16,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.local.stext,V.local.stemp,V.local.stext)
+						F.Intrinsic.control.if(V.local.stemp,=,"0000000000000000")
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",152,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,"1",V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",67,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.intrinsic.control.else
+						V.Local.sTemp.Set("")
+						F.Intrinsic.String.rpad(V.local.stemp," ",250,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.newline,V.Local.sText)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.Else
+						F.Intrinsic.Math.Mult(V.Odbc.con!rstINV.FieldVal!Amt_Price,100,V.Local.iVal)
+						F.Intrinsic.String.LPad(V.Local.ival,"0",12,V.Local.sTemp)
+						F.Intrinsic.String.RPad(V.Local.sTemp,"0",16,V.Local.sTemp)
+						F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.Intrinsic.control.if(V.local.stemp,=,"0000000000000000")
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",152,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.local.stext,"1",V.Local.sText)
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.LPad(V.Local.sTemp," ",67,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+						F.intrinsic.control.else
+							V.Local.sTemp.Set("")
+							F.Intrinsic.String.Rpad(V.Local.sTemp," ",250,V.Local.sTemp)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Local.sTemp,V.Local.sText)
+							F.Intrinsic.String.Concat(V.Local.sText,V.Ambient.NewLine,V.Local.sText)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+				F.ODBC.con!rstLINES.Close
+			F.Intrinsic.Control.EndIf
+			F.ODBC.con!rstINV.Close
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.i)
+F.Intrinsic.Control.EndIf
+F.ODBC.con!rst.Close
+
+F.Intrinsic.Control.If(V.Local.sText,<>,"")
+	F.Intrinsic.String.Concat(V.Caller.FilesDir,"\",V.Global.sFileName,V.Local.sPath)
+	F.Intrinsic.File.Exists(V.Local.sPath,V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists,=,True)
+		F.Intrinsic.File.DeleteFile(V.Local.sPath)
+	F.Intrinsic.Control.EndIf
+	F.Intrinsic.File.String2File(V.Local.sPath,V.Local.sText)
+F.Intrinsic.Control.EndIf
+V.Global.bQuote.Set(True)
+F.Intrinsic.Control.CallSub(Uploadfile)
+F.Intrinsic.Control.CallSub(Discount)
+
+
+
+Program.Sub.QuoteOpen.End
+
+Program.Sub.Comments.Start
+${$0$}$GCG_SO_LINES_IMPORT$}$ERIC$}$5/10/2012$}$False
+Program.Sub.Comments.End
+

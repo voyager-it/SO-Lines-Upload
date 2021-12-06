@@ -57,6 +57,8 @@ F.Intrinsic.Control.For(V.Local.lCount,0,V.Local.sRowData.UBound,1)
 
 	F.Intrinsic.String.Split(V.Local.sRowData(V.Local.lCount),"*!*",V.Local.sRowArray)
 	
+	'Columns in order: Part, Rev, Quantity, Price
+	
 	
 
 F.Intrinsic.Control.Next(V.Local.lCount)
@@ -65,5 +67,5 @@ Program.Sub.procData.End
 
 Program.Sub.Comments.Start
 ${$5$}$3.0.0.0$}$1
-${$6$}$lukep$}$20211122130727066$}$se77YAxmQviVSBRx6Dva+7hHQnhldcS0y9ieo2GVcPwmkwjV3RKGhc+S8YmkDpYWkzdowSHUN98=
+${$6$}$lukep$}$20211203085450525$}$se77YAxmQviVSBRx6Dva+7hHQnhldcS0UZn/kkx5I1YiiFJeKqFYJKfguex5drOiA7X7UNvvLwI=
 Program.Sub.Comments.End
